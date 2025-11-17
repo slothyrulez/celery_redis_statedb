@@ -1,7 +1,7 @@
 # Celery Redis StateDB
 
 [![Tests](https://img.shields.io/badge/tests-passing-brightgreen)](tests/)
-[![Coverage](https://img.shields.io/badge/coverage-87%25-green)](tests/)
+[![Coverage](https://img.shields.io/badge/coverage-89%25-green)](tests/)
 [![Python](https://img.shields.io/badge/python-3.10+-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -130,7 +130,75 @@ export CELERY_REDIS_STATE_KEY_PREFIX=myapp:worker:state:
 
 Revoked tasks persist **indefinitely** in Redis (matching Celery's default behavior with shelve). This ensures that once a task is revoked, it remains revoked even across worker restarts.
 
-**Manual cleanup:** If needed, you can manually remove old revoked tasks using the `purge_old_revoked()` method or `clear_revoked()` to remove all revoked tasks.
+**Important:** Revoked tasks are NEVER automatically deleted by workers. This is intentional to prevent accidentally re-executing revoked tasks.
+
+**Manual cleanup:** Use the `purge_old_revoked_tasks()` function to explicitly remove old revoked tasks when needed. This should be called periodically via a cron job or scheduled Celery task.
+
+### Manual Cleanup of Old Revoked Tasks
+
+The `purge_old_revoked_tasks()` function provides explicit control over cleaning up old revoked tasks. This function must be called manually - workers never automatically delete revoked tasks.
+
+**Basic usage:**
+```python
+from datetime import timedelta
+from celery import Celery
+from celery_redis_statedb import purge_old_revoked_tasks
+
+app = Celery('myapp')
+
+# Remove revoked tasks older than 30 days from all workers
+count = purge_old_revoked_tasks(app, older_than=timedelta(days=30))
+print(f"Removed {count} old revoked tasks")
+```
+
+**Purge specific worker:**
+```python
+# Remove old tasks from a specific worker only
+count = purge_old_revoked_tasks(
+    app,
+    older_than=timedelta(days=7),
+    worker_name="worker1@hostname",
+)
+print(f"Removed {count} tasks from worker1@hostname")
+```
+
+**Using a scheduled Celery task:**
+```python
+from celery import Celery
+from celery.schedules import crontab
+from datetime import timedelta
+from celery_redis_statedb import purge_old_revoked_tasks
+
+app = Celery('myapp')
+
+@app.on_after_configure.connect
+def setup_periodic_tasks(sender, **kwargs):
+    # Purge old revoked tasks every Sunday at midnight
+    sender.add_periodic_task(
+        crontab(hour=0, minute=0, day_of_week=0),
+        purge_old_revoked.s(),
+    )
+
+@app.task
+def purge_old_revoked():
+    """Scheduled task to clean up old revoked tasks."""
+    count = purge_old_revoked_tasks(app, older_than=timedelta(days=30))
+    return f"Purged {count} old revoked tasks"
+```
+
+**Using a cron job:**
+```bash
+# Add to crontab to run every Sunday at midnight
+0 0 * * 0 /path/to/venv/bin/python -c "from myapp import app; from celery_redis_statedb import purge_old_revoked_tasks; from datetime import timedelta; purge_old_revoked_tasks(app, timedelta(days=30))"
+```
+
+**Parameters:**
+- `app` (required): Celery application instance
+- `older_than` (required): timedelta specifying minimum age of tasks to remove
+- `worker_name` (optional): Specific worker hostname to purge (None = all workers)
+- `redis_url` (optional): Redis URL (if None, uses app.conf.broker_url)
+
+**Returns:** Total number of tasks removed across all workers
 
 ## Architecture
 
