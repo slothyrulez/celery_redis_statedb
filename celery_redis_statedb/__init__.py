@@ -9,8 +9,8 @@ on container restarts.
 import logging
 from typing import TYPE_CHECKING
 
-from celery_redis_statedb.bootstep import RedisPersistent, RedisStatePersistence
-from celery_redis_statedb.state import RedisStateDB
+from celery_redis_statedb.bootstep import RedisStatePersistence
+from celery_redis_statedb.state import RedisStateDB, RedisPersistent
 
 if TYPE_CHECKING:
     from celery import Celery
