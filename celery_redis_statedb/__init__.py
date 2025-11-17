@@ -1,16 +1,8 @@
-"""Redis-based state persistence for Celery workers.
-
-This package provides a production-grade Redis backend for Celery's worker state
-persistence, replacing the default filesystem-based shelve storage. It's designed
-for containerized environments like AWS ECS where local file persistence is lost
-on container restarts.
-"""
-
 import logging
 from typing import TYPE_CHECKING
 
 from celery_redis_statedb.bootstep import RedisStatePersistence
-from celery_redis_statedb.state import RedisStateDB, RedisPersistent
+from celery_redis_statedb.state import RedisPersistent, RedisStateDB
 
 if TYPE_CHECKING:
     from celery import Celery
@@ -22,6 +14,14 @@ __all__ = [
     "RedisPersistent",
     "install_redis_statedb",
 ]
+
+"""Redis-based state persistence for Celery workers.
+
+This package provides a production-grade Redis backend for Celery's worker state
+persistence, replacing the default filesystem-based shelve storage. It's designed
+for containerized environments like AWS ECS where local file persistence is lost
+on container restarts.
+"""
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,6 @@ def install_redis_statedb(app: Celery) -> None:
     try:
         from celery.worker.components import StateDB as DefaultStateDB
 
-        # app.steps: dict[str, set[Any]]
         # Remove default file-based StateDB
         if DefaultStateDB in app.steps["worker"]:
             app.steps["worker"].discard(DefaultStateDB)

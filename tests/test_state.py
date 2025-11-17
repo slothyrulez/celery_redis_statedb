@@ -151,6 +151,7 @@ class TestRedisStateDB:
 
         # Verify second update is stored
         result = redis_db.get_zrevoked()
+        assert result is not None
         assert "task-2" in result
         assert "task-3" in result
         assert redis_db.get_clock() == 2

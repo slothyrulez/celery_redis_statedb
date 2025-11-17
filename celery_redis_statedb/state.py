@@ -1,10 +1,11 @@
 import logging
 import zlib
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 import redis
 from celery.utils.collections import LimitedSet  # type: ignore[attr-defined]
-from kombu.serialization import pickle, pickle_protocol
+from kombu.serialization import pickle, pickle_protocol  # type: ignore[attr-defined]
 
 if TYPE_CHECKING:
     pass
@@ -29,9 +30,9 @@ class RedisStateDB:
         retry_delay: Delay between retries in seconds
     """
 
-    protocol = pickle_protocol
-    compress = zlib.compress
-    decompress = zlib.decompress
+    protocol: int = pickle_protocol
+    compress: Callable[[bytes], bytes] = zlib.compress
+    decompress: Callable[[bytes], bytes] = zlib.decompress
 
     def __init__(
         self,
@@ -95,10 +96,10 @@ class RedisStateDB:
             logger.debug("Worker state synced to Redis successfully")
         return _success
 
-    def _dumps(self, obj):
+    def _dumps(self, obj: Any) -> bytes:
         return pickle.dumps(obj, protocol=self.protocol)
 
-    def get_zrevoked(self):
+    def get_zrevoked(self) -> LimitedSet | None:
         zrevoked_key = self._get_key("zrevoked")
 
         try:

@@ -74,6 +74,7 @@ class TestRedisPersistent:
     ) -> None:
         """Test merging with existing tasks in Redis using blob storage."""
         import zlib
+
         from kombu.serialization import pickle
 
         # Pre-populate Redis with compressed blob of revoked tasks
@@ -126,6 +127,7 @@ class TestRedisPersistent:
     def test_sync(self, mock_state: Mock, mock_clock: Mock, fake_redis: FakeRedis) -> None:
         """Test syncing state to Redis using blob storage."""
         import zlib
+
         from kombu.serialization import pickle
 
         with patch("celery_redis_statedb.state.redis.from_url", return_value=fake_redis):
@@ -176,6 +178,7 @@ class TestRedisPersistent:
     def test_save(self, mock_state: Mock, mock_clock: Mock, fake_redis: FakeRedis) -> None:
         """Test saving state."""
         import zlib
+
         from kombu.serialization import pickle
 
         with patch("celery_redis_statedb.state.redis.from_url", return_value=fake_redis):
