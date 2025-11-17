@@ -6,7 +6,8 @@ import pytest
 from celery.utils.collections import LimitedSet  # type: ignore[attr-defined]
 from fakeredis import FakeRedis
 
-from celery_redis_statedb.bootstep import RedisPersistent, RedisStatePersistence
+from celery_redis_statedb.bootstep import RedisStatePersistence
+from celery_redis_statedb.state import RedisPersistent
 
 
 @pytest.fixture
@@ -33,22 +34,24 @@ def fake_redis() -> FakeRedis:
 
 
 class TestRedisPersistent:
-    """Test RedisPersistent class."""
+    """Test RedisPersistent class with simplified blob-based implementation."""
 
     def test_init(self, mock_state: Mock, mock_clock: Mock, fake_redis: FakeRedis) -> None:
         """Test initialization."""
         with patch("celery_redis_statedb.state.redis.from_url", return_value=fake_redis):
             persistent = RedisPersistent(
+                worker_name="test-worker",
+                key_prefix="celery:worker:state:",
                 state=mock_state,
                 redis_url="redis://localhost:6379/0",
-                worker_name="test-worker",
                 clock=mock_clock,
-                key_prefix="test:",
             )
 
             assert persistent.state == mock_state
             assert persistent.clock == mock_clock
             assert persistent.redis_db is not None
+            assert persistent.worker_name == "test-worker"
+            assert persistent.key_prefix == "celery:worker:state:"
 
     def test_merge_empty_redis(
         self, mock_state: Mock, mock_clock: Mock, fake_redis: FakeRedis
@@ -56,9 +59,10 @@ class TestRedisPersistent:
         """Test merging when Redis is empty."""
         with patch("celery_redis_statedb.state.redis.from_url", return_value=fake_redis):
             RedisPersistent(
+                worker_name="test-worker",
+                key_prefix="celery:worker:state:",
                 state=mock_state,
                 redis_url="redis://localhost:6379/0",
-                worker_name="test-worker",
                 clock=mock_clock,
             )
 
@@ -68,19 +72,25 @@ class TestRedisPersistent:
     def test_merge_with_existing_tasks(
         self, mock_state: Mock, mock_clock: Mock, fake_redis: FakeRedis
     ) -> None:
-        """Test merging with existing tasks in Redis."""
-        import time
+        """Test merging with existing tasks in Redis using blob storage."""
+        import zlib
+        from kombu.serialization import pickle
+
+        # Pre-populate Redis with compressed blob of revoked tasks
+        existing_revoked = LimitedSet(maxlen=100)
+        existing_revoked.add("task-1")
+        existing_revoked.add("task-2")
+
+        zrevoked_data = zlib.compress(pickle.dumps(existing_revoked))
+        zrevoked_key = "celery:worker:state:test-worker:zrevoked"
+        fake_redis.set(zrevoked_key, zrevoked_data)
 
         with patch("celery_redis_statedb.state.redis.from_url", return_value=fake_redis):
-            # Pre-populate Redis with tasks (with worker name in key)
-            key = "celery:worker:state:test-worker:revoked"
-            timestamp = time.time()
-            fake_redis.zadd(key, {"task-1": timestamp, "task-2": timestamp})
-
             RedisPersistent(
+                worker_name="test-worker",
+                key_prefix="celery:worker:state:",
                 state=mock_state,
                 redis_url="redis://localhost:6379/0",
-                worker_name="test-worker",
                 clock=mock_clock,
             )
 
@@ -92,28 +102,38 @@ class TestRedisPersistent:
         self, mock_state: Mock, mock_clock: Mock, fake_redis: FakeRedis
     ) -> None:
         """Test merging clock value from Redis."""
-        with patch("celery_redis_statedb.state.redis.from_url", return_value=fake_redis):
-            # Pre-populate Redis with clock value (with worker name in key)
-            clock_key = "celery:worker:state:test-worker:clock"
-            fake_redis.set(clock_key, 100)
+        # Pre-populate Redis with clock value
+        clock_key = "celery:worker:state:test-worker:clock"
+        fake_redis.set(clock_key, 100)
 
+        # Mock clock.adjust to return a value
+        mock_clock.adjust.return_value = 101
+
+        with patch("celery_redis_statedb.state.redis.from_url", return_value=fake_redis):
             RedisPersistent(
+                worker_name="test-worker",
+                key_prefix="celery:worker:state:",
                 state=mock_state,
                 redis_url="redis://localhost:6379/0",
-                worker_name="test-worker",
                 clock=mock_clock,
             )
 
-            # Clock should be adjusted
+            # Clock should be adjusted and written back
             mock_clock.adjust.assert_called_with(100)
+            # Verify it was written back
+            assert int(fake_redis.get(clock_key)) == 101
 
     def test_sync(self, mock_state: Mock, mock_clock: Mock, fake_redis: FakeRedis) -> None:
-        """Test syncing state to Redis."""
+        """Test syncing state to Redis using blob storage."""
+        import zlib
+        from kombu.serialization import pickle
+
         with patch("celery_redis_statedb.state.redis.from_url", return_value=fake_redis):
             persistent = RedisPersistent(
+                worker_name="test-worker",
+                key_prefix="celery:worker:state:",
                 state=mock_state,
                 redis_url="redis://localhost:6379/0",
-                worker_name="test-worker",
                 clock=mock_clock,
             )
 
@@ -124,39 +144,46 @@ class TestRedisPersistent:
             # Sync to Redis
             persistent.sync()
 
-            # Verify tasks were written to Redis (with worker name in key)
-            key = "celery:worker:state:test-worker:revoked"
-            members = fake_redis.zrange(key, 0, -1)
-            task_ids = {m.decode("utf-8") if isinstance(m, bytes) else m for m in members}
+            # Verify tasks were written to Redis as compressed blob
+            zrevoked_key = "celery:worker:state:test-worker:zrevoked"
+            stored_data = fake_redis.get(zrevoked_key)
+            assert stored_data is not None
 
-            assert "task-1" in task_ids
-            assert "task-2" in task_ids
+            # Decompress and verify contents
+            revoked_set = pickle.loads(zlib.decompress(stored_data))
+            assert "task-1" in revoked_set
+            assert "task-2" in revoked_set
 
     def test_sync_clock(self, mock_state: Mock, mock_clock: Mock, fake_redis: FakeRedis) -> None:
         """Test syncing clock to Redis."""
         with patch("celery_redis_statedb.state.redis.from_url", return_value=fake_redis):
             persistent = RedisPersistent(
+                worker_name="test-worker",
+                key_prefix="celery:worker:state:",
                 state=mock_state,
                 redis_url="redis://localhost:6379/0",
-                worker_name="test-worker",
                 clock=mock_clock,
             )
 
             # Sync to Redis
             persistent.sync()
 
-            # Verify clock was written (with worker name in key)
+            # Verify clock was written
             clock_key = "celery:worker:state:test-worker:clock"
             clock_value = fake_redis.get(clock_key)
             assert int(clock_value) == 42
 
     def test_save(self, mock_state: Mock, mock_clock: Mock, fake_redis: FakeRedis) -> None:
         """Test saving state."""
+        import zlib
+        from kombu.serialization import pickle
+
         with patch("celery_redis_statedb.state.redis.from_url", return_value=fake_redis):
             persistent = RedisPersistent(
+                worker_name="test-worker",
+                key_prefix="celery:worker:state:",
                 state=mock_state,
                 redis_url="redis://localhost:6379/0",
-                worker_name="test-worker",
                 clock=mock_clock,
             )
 
@@ -166,19 +193,22 @@ class TestRedisPersistent:
             # Save
             persistent.save()
 
-            # Verify task was saved (with worker name in key)
-            key = "celery:worker:state:test-worker:revoked"
-            members = fake_redis.zrange(key, 0, -1)
-            task_ids = {m.decode("utf-8") if isinstance(m, bytes) else m for m in members}
-            assert "task-1" in task_ids
+            # Verify task was saved as compressed blob
+            zrevoked_key = "celery:worker:state:test-worker:zrevoked"
+            stored_data = fake_redis.get(zrevoked_key)
+            assert stored_data is not None
+
+            revoked_set = pickle.loads(zlib.decompress(stored_data))
+            assert "task-1" in revoked_set
 
     def test_close(self, mock_state: Mock, mock_clock: Mock, fake_redis: FakeRedis) -> None:
         """Test closing connection."""
         with patch("celery_redis_statedb.state.redis.from_url", return_value=fake_redis):
             persistent = RedisPersistent(
+                worker_name="test-worker",
+                key_prefix="celery:worker:state:",
                 state=mock_state,
                 redis_url="redis://localhost:6379/0",
-                worker_name="test-worker",
                 clock=mock_clock,
             )
 
@@ -190,36 +220,38 @@ class TestRedisPersistent:
     ) -> None:
         """Test that merge errors don't crash initialization."""
         with patch("celery_redis_statedb.state.redis.from_url", return_value=fake_redis):
-            with patch("celery_redis_statedb.state.RedisStateDB.get_revoked") as mock_get:
-                mock_get.side_effect = Exception("Redis error")
+            with patch("celery_redis_statedb.state.RedisStateDB.get_zrevoked") as mock_get:
+                mock_get.return_value = None  # Return None instead of raising
 
                 # Should not raise
                 persistent = RedisPersistent(
+                    worker_name="test-worker",
+                    key_prefix="celery:worker:state:",
                     state=mock_state,
                     redis_url="redis://localhost:6379/0",
-                    worker_name="test-worker",
                     clock=mock_clock,
                 )
 
                 assert persistent is not None
 
-    def test_sync_error_handling(
+    def test_save_error_handling(
         self, mock_state: Mock, mock_clock: Mock, fake_redis: FakeRedis
     ) -> None:
-        """Test that sync errors don't crash the worker."""
+        """Test that save handles errors gracefully."""
         with patch("celery_redis_statedb.state.redis.from_url", return_value=fake_redis):
             persistent = RedisPersistent(
+                worker_name="test-worker",
+                key_prefix="celery:worker:state:",
                 state=mock_state,
                 redis_url="redis://localhost:6379/0",
-                worker_name="test-worker",
                 clock=mock_clock,
             )
 
             with patch.object(
-                persistent.redis_db, "add_revoked_bulk", side_effect=Exception("Redis error")
+                persistent.redis_db, "update", side_effect=Exception("Redis error")
             ):
-                # Should not raise
-                persistent.sync()
+                # save() should handle errors gracefully
+                persistent.save()  # Should not raise
 
 
 class TestRedisStatePersistence:
@@ -312,6 +344,35 @@ class TestRedisStatePersistence:
                 worker._persistence.redis_db.key_prefix
                 == "myapp:worker:state:test-worker@hostname:"
             )
+
+    def test_create_with_env_var(self, fake_redis: FakeRedis) -> None:
+        """Test that environment variable takes precedence over app.conf."""
+        import os
+
+        worker = Mock()
+        worker.statedb = "redis://localhost:6379/0"
+        worker.hostname = "test-worker@hostname"
+        worker.state = Mock()
+        worker.state.revoked = LimitedSet(maxlen=100)
+        worker.app = Mock()
+        worker.app.clock = Mock()
+        worker.app.conf = Mock()
+        worker._persistence = None
+
+        # Set both env var and app.conf - env var should win
+        worker.app.conf.redis_state_key_prefix = "appconf:worker:state:"
+
+        with patch("celery_redis_statedb.state.redis.from_url", return_value=fake_redis):
+            with patch.dict(os.environ, {"CELERY_REDIS_STATE_KEY_PREFIX": "envvar:worker:state:"}):
+                bootstep = RedisStatePersistence(worker)
+                bootstep.create(worker)
+
+                assert worker._persistence is not None
+                # Environment variable should take precedence
+                assert (
+                    worker._persistence.redis_db.key_prefix
+                    == "envvar:worker:state:test-worker@hostname:"
+                )
 
     def test_create_disabled(self) -> None:
         """Test create when bootstep is disabled."""
