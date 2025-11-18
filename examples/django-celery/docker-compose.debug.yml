@@ -1,0 +1,10 @@
+services:
+  celery-worker-1:
+    environment:
+      - CELERY_LOG_LEVEL=debug
+      - PYTHONUNBUFFERED=1
+
+  celery-worker-2:
+    environment:
+      - CELERY_LOG_LEVEL=debug
+      - PYTHONUNBUFFERED=1

@@ -1,6 +1,7 @@
 import time
 
-from celery import shared_task
+from celery import shared_task, states
+from celery.result import AsyncResult
 from celery.utils.log import get_task_logger
 
 logger = get_task_logger(__name__)
@@ -31,14 +32,15 @@ def hello(self):
     return "Hello World!"
 
 
-@shared_task(bind=True)
+@shared_task(bind=True, track_started=True)
 def long_running_task(self, duration=10):
     """Simulate a long-running task."""
     logger.info(f"Starting long task (duration: {duration}s)")
-
+    task_id = self.request.id
     for i in range(duration):
-        if self.is_revoked():
-            logger.warning(f"Task {self.request.id} was revoked!")
+        logger.info(f"Current state: {AsyncResult(task_id).status}")
+        if AsyncResult(task_id).status == states.REVOKED:
+            logger.warning(f"Task {task_id} was revoked!")
             return "Task was revoked"
 
         time.sleep(1)

@@ -44,11 +44,12 @@ services:
     build:
       context: ../..
       dockerfile: examples/django-celery/Dockerfile
-    command: .venv/bin/celery -A myproject worker -n worker1@%h --redis-statedb=redis://redis:6379/1 --loglevel=info
+    command: sh -c '.venv/bin/celery -A myproject worker -n worker1@%h --redis-statedb=redis://redis:6379/1 --loglevel=$${CELERY_LOG_LEVEL:-info}'
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/django_celery
       - CELERY_BROKER_URL=redis://redis:6379/0
       - REDIS_STATEDB_URL=redis://redis:6379/1
+      - CELERY_LOG_LEVEL=${CELERY_LOG_LEVEL:-info}
     depends_on:
       redis:
         condition: service_healthy
@@ -60,11 +61,12 @@ services:
     build:
       context: ../..
       dockerfile: examples/django-celery/Dockerfile
-    command: .venv/bin/celery -A myproject worker -n worker2@%h --redis-statedb=redis://redis:6379/1 --loglevel=info
+    command: sh -c '.venv/bin/celery -A myproject worker -n worker2@%h --redis-statedb=redis://redis:6379/1 --loglevel=$${CELERY_LOG_LEVEL:-info}'
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/django_celery
       - CELERY_BROKER_URL=redis://redis:6379/0
       - REDIS_STATEDB_URL=redis://redis:6379/1
+      - CELERY_LOG_LEVEL=${CELERY_LOG_LEVEL:-info}
     depends_on:
       redis:
         condition: service_healthy
