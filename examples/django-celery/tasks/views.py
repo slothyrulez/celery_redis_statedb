@@ -1,5 +1,6 @@
 from celery.result import AsyncResult
 from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from .tasks import (
@@ -97,6 +98,7 @@ def task_status(request, task_id):
     return JsonResponse(response)
 
 
+@csrf_exempt
 @require_http_methods(["POST"])
 def revoke_task(request, task_id):
     """Revoke a running task."""
