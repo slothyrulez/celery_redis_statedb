@@ -41,11 +41,14 @@ services:
         condition: service_healthy
 
   celery-worker-1:
+    stop_signal: SIGTERM
+    stop_grace_period: 60s
     build:
       context: ../..
       dockerfile: examples/django-celery/Dockerfile
     hostname: celery-worker-1
-    command: sh -c '.venv/bin/celery -A myproject worker -n worker1@%h --redis-statedb=redis://redis:6379/1 --loglevel=$${CELERY_LOG_LEVEL:-info}'
+    # Use exec to properly pass signals
+    command: sh -c 'exec .venv/bin/celery -A myproject worker -n worker1@%h --redis-statedb=redis://redis:6379/1 --loglevel=$${CELERY_LOG_LEVEL:-info}'
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/django_celery
       - CELERY_BROKER_URL=redis://redis:6379/0
@@ -59,11 +62,14 @@ services:
     restart: unless-stopped
 
   celery-worker-2:
+    stop_signal: SIGTERM
+    stop_grace_period: 60s
     build:
       context: ../..
       dockerfile: examples/django-celery/Dockerfile
     hostname: celery-worker-2
-    command: sh -c '.venv/bin/celery -A myproject worker -n worker2@%h --redis-statedb=redis://redis:6379/1 --loglevel=$${CELERY_LOG_LEVEL:-info}'
+    # Use exec to properly pass signals
+    command: sh -c 'exec .venv/bin/celery -A myproject worker -n worker2@%h --redis-statedb=redis://redis:6379/1 --loglevel=$${CELERY_LOG_LEVEL:-info}'
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/django_celery
       - CELERY_BROKER_URL=redis://redis:6379/0
