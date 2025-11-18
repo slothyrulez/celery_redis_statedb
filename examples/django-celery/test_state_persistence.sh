@@ -14,7 +14,7 @@ if ! docker compose ps | grep -q "Up"; then
 fi
 
 echo "Step 1: Starting a long-running task..."
-RESPONSE=$(curl -s "http://localhost:8001/tasks/long/?duration=60")
+RESPONSE=$(curl -s "http://localhost:8001/tasks/future/?eta=120")
 TASK_ID=$(echo $RESPONSE | jq -r '.task_id')
 echo "Task ID: $TASK_ID"
 echo ""
@@ -51,24 +51,36 @@ sleep 2s
 echo "Step 6: Checking worker logs before restart..."
 echo "Worker 1 revoked tasks:"
 docker compose logs celery-worker-1 2>&1 | grep -i "revoked" | tail -n 3 || echo "No revoked tasks logged yet"
+echo "Worker 2 revoked tasks:"
+docker compose logs celery-worker-2 2>&1 | grep -i "revoked" | tail -n 3 || echo "No revoked tasks logged yet"
 echo ""
 
 sleep 2s
 
-echo "Step 7: Restarting workers to test persistence..."
-docker compose restart celery-worker-1 celery-worker-2
-echo "Waiting for workers to restart..."
+echo "Step 7: Gracefully stopping workers (SIGTERM) to test persistence..."
+echo "This allows workers to save state before shutdown..."
+docker compose kill -s SIGTERM celery-worker-1 celery-worker-2
+echo "Waiting for graceful shutdown and state save..."
+sleep 2
+docker compose logs celery-worker-1 2>&1 | grep -i "saving\|closed\|shutdown" | tail -n 3 || echo "Worker stopped"
+echo ""
+
+sleep 10
+
+echo "Step 8: Starting workers back up..."
+docker compose up -d celery-worker-1 celery-worker-2
+echo "Waiting for workers to start..."
 sleep 5
 echo ""
 
-echo "Step 8: Checking worker logs after restart..."
+echo "Step 9: Checking worker logs after restart..."
 echo "Worker 1 should load revoked tasks from Redis:"
 docker compose logs celery-worker-1 2>&1 | grep -i "redis\|revoked\|state" | tail -n 10
 echo ""
 
 sleep 2s
 
-echo "Step 9: Verifying Redis still has the revoked task..."
+echo "Step 10: Verifying Redis still has the revoked task..."
 docker compose exec -T redis redis-cli KEYS "myapp:worker:state:*:zrevoked"
 echo ""
 
