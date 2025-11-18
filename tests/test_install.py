@@ -74,7 +74,7 @@ class TestInstallRedisStateDB:
             # Verify info log was called with app name
             mock_logger.info.assert_called_once()
             call_args = mock_logger.info.call_args[0]
-            assert "Redis StateDB installed successfully" in call_args[0]
+            assert "[redis-statedb] Installed successfully" in call_args[0]
             assert call_args[1] == "myapp"
 
     def test_install_without_app_name(self) -> None:
@@ -90,7 +90,7 @@ class TestInstallRedisStateDB:
             # Verify info log was called with default
             mock_logger.info.assert_called_once()
             call_args = mock_logger.info.call_args[0]
-            assert "Redis StateDB installed successfully" in call_args[0]
+            assert "[redis-statedb] Installed successfully" in call_args[0]
             assert call_args[1] == "app"
 
     def test_install_error_handling(self) -> None:
