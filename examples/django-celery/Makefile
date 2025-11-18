@@ -1,4 +1,4 @@
-.PHONY: help build up up-debug down logs logs-workers migrate shell test clean test-state-persistence workers-debug
+.PHONY: help build up up-debug down logs logs-workers migrate shell clean test-state-persistence workers-debug
 
 help:
 	@echo "Django Celery Redis StateDB Example"
@@ -10,7 +10,6 @@ help:
 	@echo "  make down        - Stop all services"
 	@echo "  make logs        - View logs from all services"
 	@echo "  make logs-workers - View logs from Celery workers only"
-	@echo "  make workers-debug - Restart workers in debug mode"
 	@echo ""
 	@echo "Advanced usage:"
 	@echo "  CELERY_LOG_LEVEL=debug make up  - Start with custom log level (debug/info/warning/error)"
