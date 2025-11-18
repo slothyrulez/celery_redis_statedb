@@ -1,11 +1,11 @@
-"""Unit tests for install_redis_statedb convenience function."""
-
 from unittest.mock import Mock, patch
 
 import pytest
 
 from celery_redis_statedb import install_redis_statedb
 from celery_redis_statedb.bootstep import RedisStatePersistence
+
+"""Unit tests for install_redis_statedb convenience function."""
 
 
 class TestInstallRedisStateDB:

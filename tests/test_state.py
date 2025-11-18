@@ -3,30 +3,10 @@
 import zlib
 from unittest.mock import patch
 
-import pytest
 from celery.utils.collections import LimitedSet  # type: ignore[attr-defined]
-from fakeredis import FakeRedis
 from kombu.serialization import pickle
 
 from celery_redis_statedb.state import RedisStateDB
-
-
-@pytest.fixture
-def fake_redis() -> FakeRedis:
-    """Create a fake Redis instance for testing."""
-    return FakeRedis(decode_responses=False)
-
-
-@pytest.fixture
-def redis_db(fake_redis: FakeRedis) -> RedisStateDB:
-    """Create a RedisStateDB instance with fake Redis."""
-    with patch("celery_redis_statedb.state.redis.from_url", return_value=fake_redis):
-        db = RedisStateDB(
-            redis_url="redis://localhost:6379/0",
-            worker_name="test-worker",
-            key_prefix="test:",
-        )
-        return db
 
 
 class TestRedisStateDB:

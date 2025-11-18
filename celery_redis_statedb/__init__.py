@@ -55,6 +55,8 @@ def install_redis_statedb(app: Celery) -> None:
     try:
         from celery.worker.components import StateDB as DefaultStateDB
 
+        assert app.steps is not None, "Celery app.steps is not initialized"
+
         # Remove default file-based StateDB
         if DefaultStateDB in app.steps["worker"]:
             app.steps["worker"].discard(DefaultStateDB)

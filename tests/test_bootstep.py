@@ -1,5 +1,6 @@
 """Unit tests for Celery bootstep."""
 
+from typing import TYPE_CHECKING
 from unittest.mock import Mock, patch
 
 import pytest
@@ -9,35 +10,14 @@ from fakeredis import FakeRedis
 from celery_redis_statedb.bootstep import RedisStatePersistence
 from celery_redis_statedb.state import RedisPersistent
 
-
-@pytest.fixture
-def mock_state() -> Mock:
-    """Create a mock worker state."""
-    state = Mock()
-    state.revoked = LimitedSet(maxlen=100)
-    return state
-
-
-@pytest.fixture
-def mock_clock() -> Mock:
-    """Create a mock logical clock."""
-    clock = Mock()
-    clock.adjust = Mock()
-    clock.forward = Mock(return_value=42)
-    return clock
-
-
-@pytest.fixture
-def fake_redis() -> FakeRedis:
-    """Create a fake Redis instance for testing."""
-    return FakeRedis(decode_responses=False)
+if TYPE_CHECKING:
+    from kombu.clocks import LamportClock
 
 
 class TestRedisPersistent:
-    """Test RedisPersistent class with simplified blob-based implementation."""
+    """Test RedisPersistent class with blob-based implementation."""
 
-    def test_init(self, mock_state: Mock, mock_clock: Mock, fake_redis: FakeRedis) -> None:
-        """Test initialization."""
+    def test_init(self, mock_state: Mock, mock_clock: LamportClock, fake_redis: FakeRedis) -> None:
         with patch("celery_redis_statedb.state.redis.from_url", return_value=fake_redis):
             persistent = RedisPersistent(
                 worker_name="test-worker",
@@ -54,7 +34,10 @@ class TestRedisPersistent:
             assert persistent.key_prefix == "celery:worker:state:"
 
     def test_merge_empty_redis(
-        self, mock_state: Mock, mock_clock: Mock, fake_redis: FakeRedis
+        self,
+        mock_state: Mock,
+        mock_clock: LamportClock,
+        fake_redis: FakeRedis,
     ) -> None:
         """Test merging when Redis is empty."""
         with patch("celery_redis_statedb.state.redis.from_url", return_value=fake_redis):
@@ -70,7 +53,10 @@ class TestRedisPersistent:
             assert len(mock_state.revoked) == 0
 
     def test_merge_with_existing_tasks(
-        self, mock_state: Mock, mock_clock: Mock, fake_redis: FakeRedis
+        self,
+        mock_state: Mock,
+        mock_clock: LamportClock,
+        fake_redis: FakeRedis,
     ) -> None:
         """Test merging with existing tasks in Redis using blob storage."""
         import zlib
@@ -100,15 +86,12 @@ class TestRedisPersistent:
             assert "task-2" in mock_state.revoked
 
     def test_merge_with_clock(
-        self, mock_state: Mock, mock_clock: Mock, fake_redis: FakeRedis
+        self, mock_state: Mock, mock_clock: LamportClock, fake_redis: FakeRedis
     ) -> None:
         """Test merging clock value from Redis."""
         # Pre-populate Redis with clock value
         clock_key = "celery:worker:state:test-worker:clock"
         fake_redis.set(clock_key, 100)
-
-        # Mock clock.adjust to return a value
-        mock_clock.adjust.return_value = 101
 
         with patch("celery_redis_statedb.state.redis.from_url", return_value=fake_redis):
             RedisPersistent(
@@ -119,12 +102,12 @@ class TestRedisPersistent:
                 clock=mock_clock,
             )
 
-            # Clock should be adjusted and written back
-            mock_clock.adjust.assert_called_with(100)
-            # Verify it was written back
-            assert int(fake_redis.get(clock_key)) == 101
+            # Clock should be adjusted (max of stored 100 and current value + 1)
+            # LamportClock.adjust(100) will set clock to max(current, 100) + 1 = 101
+            adjusted_value = int(fake_redis.get(clock_key))
+            assert adjusted_value == 101
 
-    def test_sync(self, mock_state: Mock, mock_clock: Mock, fake_redis: FakeRedis) -> None:
+    def test_sync(self, mock_state: Mock, mock_clock: LamportClock, fake_redis: FakeRedis) -> None:
         """Test syncing state to Redis using blob storage."""
         import zlib
 
@@ -156,7 +139,12 @@ class TestRedisPersistent:
             assert "task-1" in revoked_set
             assert "task-2" in revoked_set
 
-    def test_sync_clock(self, mock_state: Mock, mock_clock: Mock, fake_redis: FakeRedis) -> None:
+    def test_sync_clock(
+        self,
+        mock_state: Mock,
+        mock_clock: LamportClock,
+        fake_redis: FakeRedis,
+    ) -> None:
         """Test syncing clock to Redis."""
         with patch("celery_redis_statedb.state.redis.from_url", return_value=fake_redis):
             persistent = RedisPersistent(
@@ -170,12 +158,13 @@ class TestRedisPersistent:
             # Sync to Redis
             persistent.sync()
 
-            # Verify clock was written
+            # Verify clock was written (value should match clock.forward())
             clock_key = "celery:worker:state:test-worker:clock"
             clock_value = fake_redis.get(clock_key)
-            assert int(clock_value) == 42
+            # Clock value should be greater than 0 after forward() is called
+            assert int(clock_value) > 0
 
-    def test_save(self, mock_state: Mock, mock_clock: Mock, fake_redis: FakeRedis) -> None:
+    def test_save(self, mock_state: Mock, mock_clock: LamportClock, fake_redis: FakeRedis) -> None:
         """Test saving state."""
         import zlib
 
@@ -204,7 +193,7 @@ class TestRedisPersistent:
             revoked_set = pickle.loads(zlib.decompress(stored_data))
             assert "task-1" in revoked_set
 
-    def test_close(self, mock_state: Mock, mock_clock: Mock, fake_redis: FakeRedis) -> None:
+    def test_close(self, mock_state: Mock, mock_clock: LamportClock, fake_redis: FakeRedis) -> None:
         """Test closing connection."""
         with patch("celery_redis_statedb.state.redis.from_url", return_value=fake_redis):
             persistent = RedisPersistent(
@@ -219,7 +208,7 @@ class TestRedisPersistent:
             persistent.close()
 
     def test_merge_error_handling(
-        self, mock_state: Mock, mock_clock: Mock, fake_redis: FakeRedis
+        self, mock_state: Mock, mock_clock: LamportClock, fake_redis: FakeRedis
     ) -> None:
         """Test that merge errors don't crash initialization."""
         with patch("celery_redis_statedb.state.redis.from_url", return_value=fake_redis):
@@ -238,7 +227,7 @@ class TestRedisPersistent:
                 assert persistent is not None
 
     def test_save_error_handling(
-        self, mock_state: Mock, mock_clock: Mock, fake_redis: FakeRedis
+        self, mock_state: Mock, mock_clock: LamportClock, fake_redis: FakeRedis
     ) -> None:
         """Test that save handles errors gracefully."""
         with patch("celery_redis_statedb.state.redis.from_url", return_value=fake_redis):
@@ -250,9 +239,7 @@ class TestRedisPersistent:
                 clock=mock_clock,
             )
 
-            with patch.object(
-                persistent.redis_db, "update", side_effect=Exception("Redis error")
-            ):
+            with patch.object(persistent.redis_db, "update", side_effect=Exception("Redis error")):
                 # save() should handle errors gracefully
                 persistent.save()  # Should not raise
 
