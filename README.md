@@ -436,6 +436,12 @@ uv run mypy celery_redis_statedb/
 uv run ty check celery_redis_statedb/
 ```
 
+## Documentation
+
+For detailed information about Celery's state persistence format and how this package implements it:
+
+- [Celery Shelve Format Documentation](docs/CELERY_SHELVE_FORMAT.md) - Comprehensive guide to what Celery stores in its state database
+
 ## License
 
 MIT License - see [LICENSE](LICENSE) file for details.

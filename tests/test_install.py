@@ -1,6 +1,7 @@
 from unittest.mock import Mock, patch
 
 import pytest
+from click import Option
 
 from celery_redis_statedb import install_redis_statedb
 from celery_redis_statedb.bootstep import RedisStatePersistence
@@ -17,27 +18,7 @@ class TestInstallRedisStateDB:
         app = Mock()
         app.main = "testapp"
         app.steps = {"worker": set()}
-
-        # Mock the default StateDB
-        with patch("celery.worker.components.StateDB") as mock_default_statedb:
-            # Add default StateDB to app
-            app.steps["worker"].add(mock_default_statedb)
-
-            # Install Redis StateDB
-            install_redis_statedb(app)
-
-            # Verify default StateDB was removed
-            assert mock_default_statedb not in app.steps["worker"]
-
-            # Verify Redis StateDB was added
-            assert RedisStatePersistence in app.steps["worker"]
-
-    def test_install_without_default_statedb(self) -> None:
-        """Test installation when default StateDB is not present."""
-        # Create mock app without default StateDB
-        app = Mock()
-        app.main = "testapp"
-        app.steps = {"worker": set()}
+        app.user_options = {"worker": set()}
 
         # Install Redis StateDB
         install_redis_statedb(app)
@@ -45,11 +26,32 @@ class TestInstallRedisStateDB:
         # Verify Redis StateDB was added
         assert RedisStatePersistence in app.steps["worker"]
 
+        # Verify CLI option was added
+        assert len(app.user_options["worker"]) == 1
+        option = list(app.user_options["worker"])[0]
+        assert isinstance(option, Option)
+        assert "--redis-statedb" in option.opts
+
+    def test_install_cli_option_parameters(self) -> None:
+        """Test that the CLI option has correct parameters."""
+        app = Mock()
+        app.main = "testapp"
+        app.steps = {"worker": set()}
+        app.user_options = {"worker": set()}
+
+        install_redis_statedb(app)
+
+        option = list(app.user_options["worker"])[0]
+        assert option.type.name == "text"  # str type in Click
+        assert option.default is None
+        assert "Redis URL for state persistence" in option.help
+
     def test_install_idempotent(self) -> None:
         """Test that installing multiple times is safe."""
         app = Mock()
         app.main = "testapp"
         app.steps = {"worker": set()}
+        app.user_options = {"worker": set()}
 
         # Install twice
         install_redis_statedb(app)
@@ -64,6 +66,7 @@ class TestInstallRedisStateDB:
         app = Mock()
         app.main = "myapp"
         app.steps = {"worker": set()}
+        app.user_options = {"worker": set()}
 
         with patch("celery_redis_statedb.logger") as mock_logger:
             install_redis_statedb(app)
@@ -79,6 +82,7 @@ class TestInstallRedisStateDB:
         app = Mock()
         app.main = None
         app.steps = {"worker": set()}
+        app.user_options = {"worker": set()}
 
         with patch("celery_redis_statedb.logger") as mock_logger:
             install_redis_statedb(app)
@@ -92,6 +96,7 @@ class TestInstallRedisStateDB:
     def test_install_error_handling(self) -> None:
         """Test handling of errors during installation."""
         app = Mock()
+        app.user_options = {"worker": set()}
         mock_worker_steps = Mock()
         mock_worker_steps.add = Mock(side_effect=Exception("Add failed"))
         mock_worker_steps.__contains__ = Mock(return_value=False)

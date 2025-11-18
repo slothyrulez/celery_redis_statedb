@@ -248,22 +248,20 @@ class TestRedisStatePersistence:
     """Test RedisStatePersistence bootstep."""
 
     def test_init_enabled_with_redis_url(self) -> None:
-        """Test initialization when statedb is a Redis URL."""
+        """Test initialization when redis_statedb parameter is a Redis URL."""
         worker = Mock()
-        worker.statedb = "redis://localhost:6379/0"
         worker._persistence = None
 
-        bootstep = RedisStatePersistence(worker)
+        bootstep = RedisStatePersistence(worker, redis_statedb="redis://localhost:6379/0")
 
         assert bootstep.enabled is True
 
     def test_init_enabled_with_rediss_url(self) -> None:
         """Test initialization with secure Redis URL."""
         worker = Mock()
-        worker.statedb = "rediss://localhost:6379/0"
         worker._persistence = None
 
-        bootstep = RedisStatePersistence(worker)
+        bootstep = RedisStatePersistence(worker, redis_statedb="rediss://localhost:6379/0")
 
         assert bootstep.enabled is True
 
@@ -287,10 +285,43 @@ class TestRedisStatePersistence:
 
         assert bootstep.enabled is False
 
+    def test_init_with_redis_statedb_parameter(self) -> None:
+        """Test initialization with --redis-statedb parameter."""
+        worker = Mock()
+        worker.statedb = None
+        worker._persistence = None
+
+        bootstep = RedisStatePersistence(worker, redis_statedb="redis://localhost:6379/1")
+
+        assert bootstep.enabled is True
+        assert bootstep.redis_statedb == "redis://localhost:6379/1"
+
+    def test_init_redis_statedb_takes_precedence_over_statedb(self) -> None:
+        """Test that --redis-statedb takes precedence over --statedb."""
+        worker = Mock()
+        worker.statedb = "/tmp/celery-state.db"  # Non-Redis statedb
+        worker._persistence = None
+
+        # redis_statedb should enable the bootstep even though statedb is a file path
+        bootstep = RedisStatePersistence(worker, redis_statedb="redis://localhost:6379/1")
+
+        assert bootstep.enabled is True
+        assert bootstep.redis_statedb == "redis://localhost:6379/1"
+
+    def test_init_redis_statedb_overrides_redis_statedb(self) -> None:
+        """Test that --redis-statedb overrides --statedb even when both are Redis URLs."""
+        worker = Mock()
+        worker.statedb = "redis://localhost:6379/0"  # Different Redis DB
+        worker._persistence = None
+
+        bootstep = RedisStatePersistence(worker, redis_statedb="redis://localhost:6379/1")
+
+        assert bootstep.enabled is True
+        assert bootstep.redis_statedb == "redis://localhost:6379/1"
+
     def test_create_with_defaults(self, fake_redis: FakeRedis) -> None:
         """Test creating persistence layer with default configuration."""
         worker = Mock()
-        worker.statedb = "redis://localhost:6379/0"
         worker.hostname = "test-worker@hostname"
         worker.state = Mock()
         worker.state.revoked = LimitedSet(maxlen=100)
@@ -303,7 +334,7 @@ class TestRedisStatePersistence:
         worker.app.conf.redis_state_key_prefix = "celery:worker:state:"
 
         with patch("celery_redis_statedb.state.redis.from_url", return_value=fake_redis):
-            bootstep = RedisStatePersistence(worker)
+            bootstep = RedisStatePersistence(worker, redis_statedb="redis://localhost:6379/0")
             bootstep.create(worker)
 
             assert worker._persistence is not None
@@ -312,7 +343,6 @@ class TestRedisStatePersistence:
     def test_create_with_custom_config(self, fake_redis: FakeRedis) -> None:
         """Test creating persistence layer with custom configuration."""
         worker = Mock()
-        worker.statedb = "redis://localhost:6379/0"
         worker.hostname = "test-worker@hostname"
         worker.state = Mock()
         worker.state.revoked = LimitedSet(maxlen=100)
@@ -325,7 +355,7 @@ class TestRedisStatePersistence:
         worker.app.conf.redis_state_key_prefix = "myapp:worker:state:"
 
         with patch("celery_redis_statedb.state.redis.from_url", return_value=fake_redis):
-            bootstep = RedisStatePersistence(worker)
+            bootstep = RedisStatePersistence(worker, redis_statedb="redis://localhost:6379/0")
             bootstep.create(worker)
 
             assert worker._persistence is not None
@@ -340,7 +370,6 @@ class TestRedisStatePersistence:
         import os
 
         worker = Mock()
-        worker.statedb = "redis://localhost:6379/0"
         worker.hostname = "test-worker@hostname"
         worker.state = Mock()
         worker.state.revoked = LimitedSet(maxlen=100)
@@ -354,7 +383,7 @@ class TestRedisStatePersistence:
 
         with patch("celery_redis_statedb.state.redis.from_url", return_value=fake_redis):
             with patch.dict(os.environ, {"CELERY_REDIS_STATE_KEY_PREFIX": "envvar:worker:state:"}):
-                bootstep = RedisStatePersistence(worker)
+                bootstep = RedisStatePersistence(worker, redis_statedb="redis://localhost:6379/0")
                 bootstep.create(worker)
 
                 assert worker._persistence is not None
@@ -363,6 +392,32 @@ class TestRedisStatePersistence:
                     worker._persistence.redis_db.key_prefix
                     == "envvar:worker:state:test-worker@hostname:"
                 )
+
+    def test_create_with_redis_statedb_parameter(self, fake_redis: FakeRedis) -> None:
+        """Test that create uses redis_statedb parameter when provided."""
+        worker = Mock()
+        worker.statedb = "redis://localhost:6379/0"  # Different URL
+        worker.hostname = "test-worker@hostname"
+        worker.state = Mock()
+        worker.state.revoked = LimitedSet(maxlen=100)
+        worker.app = Mock()
+        worker.app.clock = Mock()
+        worker.app.conf = Mock()
+        worker._persistence = None
+
+        worker.app.conf.redis_state_key_prefix = "celery:worker:state:"
+
+        with patch(
+            "celery_redis_statedb.state.redis.from_url", return_value=fake_redis
+        ) as mock_from_url:
+            # Pass redis_statedb which should take precedence
+            bootstep = RedisStatePersistence(worker, redis_statedb="redis://localhost:6379/1")
+            bootstep.create(worker)
+
+            assert worker._persistence is not None
+            # Verify redis.from_url was called with redis_statedb, not worker.statedb
+            assert mock_from_url.called
+            assert mock_from_url.call_args[0][0] == "redis://localhost:6379/1"
 
     def test_create_disabled(self) -> None:
         """Test create when bootstep is disabled."""
@@ -379,7 +434,6 @@ class TestRedisStatePersistence:
     def test_create_registers_atexit(self, fake_redis: FakeRedis) -> None:
         """Test that create registers atexit handler."""
         worker = Mock()
-        worker.statedb = "redis://localhost:6379/0"
         worker.hostname = "test-worker@hostname"
         worker.state = Mock()
         worker.state.revoked = LimitedSet(maxlen=100)
@@ -392,7 +446,7 @@ class TestRedisStatePersistence:
 
         with patch("celery_redis_statedb.state.redis.from_url", return_value=fake_redis):
             with patch("celery_redis_statedb.bootstep.atexit.register") as mock_atexit:
-                bootstep = RedisStatePersistence(worker)
+                bootstep = RedisStatePersistence(worker, redis_statedb="redis://localhost:6379/0")
                 bootstep.create(worker)
 
                 # Verify atexit was called with save method
@@ -402,7 +456,6 @@ class TestRedisStatePersistence:
     def test_create_error_handling(self) -> None:
         """Test error handling during create."""
         worker = Mock()
-        worker.statedb = "redis://localhost:6379/0"
         worker.hostname = "test-worker@hostname"
         worker.state = Mock()
         worker.app = Mock()
@@ -415,7 +468,7 @@ class TestRedisStatePersistence:
             "celery_redis_statedb.bootstep.RedisPersistent",
             side_effect=Exception("Connection failed"),
         ):
-            bootstep = RedisStatePersistence(worker)
+            bootstep = RedisStatePersistence(worker, redis_statedb="redis://localhost:6379/0")
 
             with pytest.raises(Exception):
                 bootstep.create(worker)
