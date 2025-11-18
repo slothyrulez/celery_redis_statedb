@@ -327,6 +327,8 @@ class TestRedisStatePersistence:
         worker.state.revoked = LimitedSet(maxlen=100)
         worker.app = Mock()
         worker.app.clock = Mock()
+        worker.app.clock.adjust = Mock(return_value=100)
+        worker.app.clock.forward = Mock(return_value=101)
         worker.app.conf = Mock()
         worker._persistence = None
 
@@ -348,6 +350,8 @@ class TestRedisStatePersistence:
         worker.state.revoked = LimitedSet(maxlen=100)
         worker.app = Mock()
         worker.app.clock = Mock()
+        worker.app.clock.adjust = Mock(return_value=100)
+        worker.app.clock.forward = Mock(return_value=101)
         worker.app.conf = Mock()
         worker._persistence = None
 
@@ -375,6 +379,8 @@ class TestRedisStatePersistence:
         worker.state.revoked = LimitedSet(maxlen=100)
         worker.app = Mock()
         worker.app.clock = Mock()
+        worker.app.clock.adjust = Mock(return_value=100)
+        worker.app.clock.forward = Mock(return_value=101)
         worker.app.conf = Mock()
         worker._persistence = None
 
@@ -402,6 +408,8 @@ class TestRedisStatePersistence:
         worker.state.revoked = LimitedSet(maxlen=100)
         worker.app = Mock()
         worker.app.clock = Mock()
+        worker.app.clock.adjust = Mock(return_value=100)
+        worker.app.clock.forward = Mock(return_value=101)
         worker.app.conf = Mock()
         worker._persistence = None
 
@@ -439,6 +447,8 @@ class TestRedisStatePersistence:
         worker.state.revoked = LimitedSet(maxlen=100)
         worker.app = Mock()
         worker.app.clock = Mock()
+        worker.app.clock.adjust = Mock(return_value=100)
+        worker.app.clock.forward = Mock(return_value=101)
         worker.app.conf = Mock()
         worker._persistence = None
 
