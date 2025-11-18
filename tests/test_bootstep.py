@@ -250,7 +250,7 @@ class TestRedisStatePersistence:
     def test_init_enabled_with_redis_url(self) -> None:
         """Test initialization when redis_statedb parameter is a Redis URL."""
         worker = Mock()
-        worker._persistence = None
+        worker._redis_persistence = None
 
         bootstep = RedisStatePersistence(worker, redis_statedb="redis://localhost:6379/0")
 
@@ -259,7 +259,7 @@ class TestRedisStatePersistence:
     def test_init_enabled_with_rediss_url(self) -> None:
         """Test initialization with secure Redis URL."""
         worker = Mock()
-        worker._persistence = None
+        worker._redis_persistence = None
 
         bootstep = RedisStatePersistence(worker, redis_statedb="rediss://localhost:6379/0")
 
@@ -269,7 +269,7 @@ class TestRedisStatePersistence:
         """Test initialization when statedb is not set."""
         worker = Mock()
         worker.statedb = None
-        worker._persistence = None
+        worker._redis_persistence = None
 
         bootstep = RedisStatePersistence(worker)
 
@@ -279,7 +279,7 @@ class TestRedisStatePersistence:
         """Test initialization when statedb is not a Redis URL."""
         worker = Mock()
         worker.statedb = "/tmp/celery-state.db"
-        worker._persistence = None
+        worker._redis_persistence = None
 
         bootstep = RedisStatePersistence(worker)
 
@@ -289,7 +289,7 @@ class TestRedisStatePersistence:
         """Test initialization with --redis-statedb parameter."""
         worker = Mock()
         worker.statedb = None
-        worker._persistence = None
+        worker._redis_persistence = None
 
         bootstep = RedisStatePersistence(worker, redis_statedb="redis://localhost:6379/1")
 
@@ -300,7 +300,7 @@ class TestRedisStatePersistence:
         """Test that --redis-statedb takes precedence over --statedb."""
         worker = Mock()
         worker.statedb = "/tmp/celery-state.db"  # Non-Redis statedb
-        worker._persistence = None
+        worker._redis_persistence = None
 
         # redis_statedb should enable the bootstep even though statedb is a file path
         bootstep = RedisStatePersistence(worker, redis_statedb="redis://localhost:6379/1")
@@ -312,7 +312,7 @@ class TestRedisStatePersistence:
         """Test that --redis-statedb overrides --statedb even when both are Redis URLs."""
         worker = Mock()
         worker.statedb = "redis://localhost:6379/0"  # Different Redis DB
-        worker._persistence = None
+        worker._redis_persistence = None
 
         bootstep = RedisStatePersistence(worker, redis_statedb="redis://localhost:6379/1")
 
@@ -330,7 +330,7 @@ class TestRedisStatePersistence:
         worker.app.clock.adjust = Mock(return_value=100)
         worker.app.clock.forward = Mock(return_value=101)
         worker.app.conf = Mock()
-        worker._persistence = None
+        worker._redis_persistence = None
 
         # Set default config values
         worker.app.conf.redis_state_key_prefix = "celery:worker:state:"
@@ -339,8 +339,8 @@ class TestRedisStatePersistence:
             bootstep = RedisStatePersistence(worker, redis_statedb="redis://localhost:6379/0")
             bootstep.create(worker)
 
-            assert worker._persistence is not None
-            assert isinstance(worker._persistence, RedisPersistent)
+            assert worker._redis_persistence is not None
+            assert isinstance(worker._redis_persistence, RedisPersistent)
 
     def test_create_with_custom_config(self, fake_redis: FakeRedis) -> None:
         """Test creating persistence layer with custom configuration."""
@@ -353,7 +353,7 @@ class TestRedisStatePersistence:
         worker.app.clock.adjust = Mock(return_value=100)
         worker.app.clock.forward = Mock(return_value=101)
         worker.app.conf = Mock()
-        worker._persistence = None
+        worker._redis_persistence = None
 
         # Set custom config values
         worker.app.conf.redis_state_key_prefix = "myapp:worker:state:"
@@ -362,10 +362,10 @@ class TestRedisStatePersistence:
             bootstep = RedisStatePersistence(worker, redis_statedb="redis://localhost:6379/0")
             bootstep.create(worker)
 
-            assert worker._persistence is not None
+            assert worker._redis_persistence is not None
             # Key prefix now includes worker hostname
             assert (
-                worker._persistence.redis_db.key_prefix
+                worker._redis_persistence.redis_db.key_prefix
                 == "myapp:worker:state:test-worker@hostname:"
             )
 
@@ -382,7 +382,7 @@ class TestRedisStatePersistence:
         worker.app.clock.adjust = Mock(return_value=100)
         worker.app.clock.forward = Mock(return_value=101)
         worker.app.conf = Mock()
-        worker._persistence = None
+        worker._redis_persistence = None
 
         # Set both env var and app.conf - env var should win
         worker.app.conf.redis_state_key_prefix = "appconf:worker:state:"
@@ -392,10 +392,10 @@ class TestRedisStatePersistence:
                 bootstep = RedisStatePersistence(worker, redis_statedb="redis://localhost:6379/0")
                 bootstep.create(worker)
 
-                assert worker._persistence is not None
+                assert worker._redis_persistence is not None
                 # Environment variable should take precedence
                 assert (
-                    worker._persistence.redis_db.key_prefix
+                    worker._redis_persistence.redis_db.key_prefix
                     == "envvar:worker:state:test-worker@hostname:"
                 )
 
@@ -411,7 +411,7 @@ class TestRedisStatePersistence:
         worker.app.clock.adjust = Mock(return_value=100)
         worker.app.clock.forward = Mock(return_value=101)
         worker.app.conf = Mock()
-        worker._persistence = None
+        worker._redis_persistence = None
 
         worker.app.conf.redis_state_key_prefix = "celery:worker:state:"
 
@@ -422,7 +422,7 @@ class TestRedisStatePersistence:
             bootstep = RedisStatePersistence(worker, redis_statedb="redis://localhost:6379/1")
             bootstep.create(worker)
 
-            assert worker._persistence is not None
+            assert worker._redis_persistence is not None
             # Verify redis.from_url was called with redis_statedb, not worker.statedb
             assert mock_from_url.called
             assert mock_from_url.call_args[0][0] == "redis://localhost:6379/1"
@@ -431,13 +431,13 @@ class TestRedisStatePersistence:
         """Test create when bootstep is disabled."""
         worker = Mock()
         worker.statedb = None
-        worker._persistence = None
+        worker._redis_persistence = None
 
         bootstep = RedisStatePersistence(worker)
         bootstep.create(worker)
 
         # Should not create persistence layer
-        assert worker._persistence is None
+        assert worker._redis_persistence is None
 
     def test_create_registers_atexit(self, fake_redis: FakeRedis) -> None:
         """Test that create registers atexit handler."""
@@ -450,7 +450,7 @@ class TestRedisStatePersistence:
         worker.app.clock.adjust = Mock(return_value=100)
         worker.app.clock.forward = Mock(return_value=101)
         worker.app.conf = Mock()
-        worker._persistence = None
+        worker._redis_persistence = None
 
         worker.app.conf.redis_state_key_prefix = "celery:worker:state:"
 
@@ -461,7 +461,7 @@ class TestRedisStatePersistence:
 
                 # Verify atexit was called with save method
                 mock_atexit.assert_called_once()
-                assert mock_atexit.call_args[0][0] == worker._persistence.save
+                assert mock_atexit.call_args[0][0] == worker._redis_persistence.save
 
     def test_create_error_handling(self) -> None:
         """Test error handling during create."""
@@ -470,7 +470,7 @@ class TestRedisStatePersistence:
         worker.state = Mock()
         worker.app = Mock()
         worker.app.conf = Mock()
-        worker._persistence = None
+        worker._redis_persistence = None
 
         worker.app.conf.redis_state_key_prefix = "celery:worker:state:"
 
@@ -484,4 +484,4 @@ class TestRedisStatePersistence:
                 bootstep.create(worker)
 
             # Persistence should be None after error
-            assert worker._persistence is None
+            assert worker._redis_persistence is None
