@@ -68,22 +68,26 @@ class RedisStatePersistence(bootsteps.Step):
             ),
         )
 
-        logger.info("[redis-statedb] Setting up persistence for worker=%s: %s", worker_name, redis_url)
+        logger.info(
+            "[redis-statedb] Setting up persistence for worker=%s: %s",
+            worker_name,
+            redis_url,
+        )
 
         try:
             # Create persistence layer with Celery-compatible API
-            worker._persistence = RedisPersistent(  # type: ignore[attr-defined]
+            worker._redis_persistence = RedisPersistent(  # type: ignore[attr-defined]
                 worker_name=worker_name,
                 key_prefix=key_prefix,
                 state=worker.state,  # type: ignore[attr-defined]
                 redis_url=redis_url,
                 clock=worker.app.clock,  # type: ignore[attr-defined]
             )
-            atexit.register(worker._persistence.save)  # type: ignore[attr-defined]
+            atexit.register(worker._redis_persistence.save)  # type: ignore[attr-defined]
             logger.info("[redis-statedb] State persistence initialized successfully")
 
         except Exception as exc:
             logger.error("[redis-statedb] Failed to initialize state persistence: %s", exc)
             # Set to None so worker can continue without persistence
-            worker._persistence = None  # type: ignore[attr-defined]
+            worker._redis_persistence = None  # type: ignore[attr-defined]
             raise
