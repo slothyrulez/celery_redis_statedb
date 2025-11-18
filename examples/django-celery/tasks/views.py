@@ -1,3 +1,5 @@
+import datetime
+
 from celery.result import AsyncResult
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -6,7 +8,6 @@ from django.views.decorators.http import require_http_methods
 from .tasks import (
     add,
     hello,
-    long_running_task,
     multiply,
 )
 
@@ -61,17 +62,18 @@ def trigger_hello(request):
 
 
 @require_http_methods(["GET"])
-def trigger_long_task(request):
-    """Trigger a long-running task."""
-    duration = int(request.GET.get("duration", 10))
+def trigger_future_task(request):
+    """Trigger a future task."""
+    eta = int(request.GET.get("eta", 10))
+    datetime_eta = datetime.datetime.now(tz=datetime.UTC) + datetime.timedelta(seconds=eta)
 
-    task = long_running_task.delay(duration)
+    task = hello.apply_async(eta=datetime_eta)
 
     return JsonResponse(
         {
             "task_id": task.id,
-            "status": "Long task triggered",
-            "duration": duration,
+            "status": "Future task triggered",
+            "eta": eta,
         }
     )
 
@@ -101,10 +103,9 @@ def task_status(request, task_id):
 @csrf_exempt
 @require_http_methods(["POST"])
 def revoke_task(request, task_id):
-    """Revoke a running task."""
-    from myproject.celery import app
+    """Revoke a task."""
 
-    app.control.revoke(task_id, terminate=True)
+    AsyncResult(task_id).revoke(terminate=True)
 
     return JsonResponse(
         {
