@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   redis:
     image: redis:7-alpine
@@ -26,12 +24,12 @@ services:
       retries: 5
 
   web:
-    build: .
-    command: python manage.py runserver 0.0.0.0:8000
-    volumes:
-      - .:/app
+    build:
+      context: ../..
+      dockerfile: examples/django-celery/Dockerfile
+    command: .venv/bin/python manage.py runserver 0.0.0.0:8000
     ports:
-      - "8000:8000"
+      - "8001:8000"
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/django_celery
       - CELERY_BROKER_URL=redis://redis:6379/0
@@ -43,10 +41,10 @@ services:
         condition: service_healthy
 
   celery-worker-1:
-    build: .
-    command: celery -A myproject worker -n worker1@%h --statedb=redis://redis:6379/1 --loglevel=info
-    volumes:
-      - .:/app
+    build:
+      context: ../..
+      dockerfile: examples/django-celery/Dockerfile
+    command: .venv/bin/celery -A myproject worker -n worker1@%h --redis-statedb=redis://redis:6379/1 --loglevel=info
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/django_celery
       - CELERY_BROKER_URL=redis://redis:6379/0
@@ -59,10 +57,10 @@ services:
     restart: unless-stopped
 
   celery-worker-2:
-    build: .
-    command: celery -A myproject worker -n worker2@%h --statedb=redis://redis:6379/1 --loglevel=info
-    volumes:
-      - .:/app
+    build:
+      context: ../..
+      dockerfile: examples/django-celery/Dockerfile
+    command: .venv/bin/celery -A myproject worker -n worker2@%h --redis-statedb=redis://redis:6379/1 --loglevel=info
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/django_celery
       - CELERY_BROKER_URL=redis://redis:6379/0
@@ -71,38 +69,6 @@ services:
       redis:
         condition: service_healthy
       db:
-        condition: service_healthy
-    restart: unless-stopped
-
-  celery-beat:
-    build: .
-    command: celery -A myproject beat --loglevel=info
-    volumes:
-      - .:/app
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/django_celery
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - REDIS_STATEDB_URL=redis://redis:6379/1
-    depends_on:
-      redis:
-        condition: service_healthy
-      db:
-        condition: service_healthy
-    restart: unless-stopped
-
-  celery-flower:
-    build: .
-    command: celery -A myproject flower --port=5555
-    volumes:
-      - .:/app
-    ports:
-      - "5555:5555"
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/django_celery
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - REDIS_STATEDB_URL=redis://redis:6379/1
-    depends_on:
-      redis:
         condition: service_healthy
     restart: unless-stopped
 
