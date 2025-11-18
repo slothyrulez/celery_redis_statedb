@@ -57,10 +57,10 @@ def install_redis_statedb(app: "Celery") -> None:
         )
     )
 
-    logger.debug("Registered --redis-statedb CLI option for worker command")
+    logger.debug("[redis-statedb] Registered --redis-statedb CLI option for worker command")
 
     # Add Redis-based StateDB
     assert app.steps is not None, "Celery app.steps is not initialized"
     app.steps["worker"].add(RedisStatePersistence)
 
-    logger.info("Redis StateDB installed successfully on %s", app.main or "app")  # type: ignore[attr-defined]
+    logger.info("[redis-statedb] Installed successfully on %s", app.main or "app")  # type: ignore[attr-defined]
