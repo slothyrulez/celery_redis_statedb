@@ -4,6 +4,30 @@ version = "0.1.0"
 description = "Redis-based statedb persistence for Celery workers"
 readme = "README.md"
 requires-python = ">=3.10"
+authors = [
+    {name = "Slothy Rules", email = "slothyrulez@gmail.com"}
+]
+keywords = ["celery", "redis", "statedb", "persistence", "workers", "distributed"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Distributed Computing",
+]
+
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
+publish-url = "https://test.pypi.org/legacy/"
+explicit = true
+
 dependencies = [
     "celery>=5.0.0",
     "redis>=4.0.0",
@@ -19,6 +43,15 @@ dev = [
     "pytest-cov>=4.0.0",
     "fakeredis>=2.10.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/slothyrulez/celery_redis_statedb"
+Repository = "https://github.com/slothyrulez/celery_redis_statedb"
+Issues = "https://github.com/slothyrulez/celery_redis_statedb/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.ruff]
 line-length = 100
