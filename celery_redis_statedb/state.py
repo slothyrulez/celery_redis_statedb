@@ -107,7 +107,7 @@ class RedisStateDB:
             if value is None:
                 return None
             data = pickle.loads(self.decompress(value))
-            logger.debug("[redis-statedb] Revoked tasks retrieved successfully: %s", data)
+            logger.debug("[redis-statedb] Revoked tasks retrieved successfully")
             return data
         except (redis.ConnectionError, redis.TimeoutError, redis.RedisError) as exc:
             logger.error("[redis-statedb] Failed to get revoked tasks: %s", exc)
