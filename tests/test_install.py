@@ -18,6 +18,10 @@ class TestInstallRedisStateDB:
         # Install Redis StateDB
         install_redis_statedb(celery_app)
 
+        # Type narrowing for typechecker
+        assert celery_app.steps is not None
+        assert celery_app.user_options is not None
+
         # Verify Redis StateDB was added
         assert RedisStatePersistence in celery_app.steps["worker"]
 
@@ -31,6 +35,9 @@ class TestInstallRedisStateDB:
         """Test that the CLI option has correct parameters."""
         install_redis_statedb(celery_app)
 
+        # Type narrowing for typechecker
+        assert celery_app.user_options is not None
+
         option = list(celery_app.user_options["worker"])[0]
         assert option.type.name == "text"  # str type in Click
         assert option.default is None
@@ -41,6 +48,9 @@ class TestInstallRedisStateDB:
         # Install twice
         install_redis_statedb(celery_app)
         install_redis_statedb(celery_app)
+
+        # Type narrowing for typechecker
+        assert celery_app.steps is not None
 
         # Should only have one instance
         assert RedisStatePersistence in celery_app.steps["worker"]
