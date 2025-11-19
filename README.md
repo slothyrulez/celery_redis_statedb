@@ -115,12 +115,6 @@ Celery's `LimitedSet` automatically purges expired items based on the `maxlen` p
 
 ## Architecture
 
-### Components
-
-1. **RedisStateDB**: Core class that manages Redis operations for a specific worker
-2. **RedisPersistent**: Persistence layer that integrates with Celery's state
-3. **RedisStatePersistence**: Celery bootstep for automatic initialization
-
 ### Per-Worker Key Isolation
 
 Each worker maintains its own state using a unique key prefix based on the worker's hostname:
@@ -211,75 +205,8 @@ Example ECS task definition with custom worker hostname:
 ```
 
 **Best Practices for ECS:**
-- Each task gets a unique hostname automatically (task ID)
 - Set `stopTimeout` to allow graceful shutdown (e.g., 120 seconds for 2-minute tasks)
-- Use ECS service auto-scaling based on queue depth
 
-### Kubernetes Deployment
-
-Example Kubernetes deployment:
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: celery-worker
-spec:
-  replicas: 3
-  template:
-    spec:
-      containers:
-      - name: celery-worker
-        image: myapp:latest
-        command:
-          - celery
-          - -A
-          - myapp
-          - worker
-          - -n
-          - worker@$(HOSTNAME)
-          - --redis-statedb=redis://redis-service:6379/0
-          - --loglevel=info
-        env:
-          - name: HOSTNAME
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.name
-        resources:
-          requests:
-            cpu: "1"
-            memory: "1Gi"
-```
-
-**Best Practices for Kubernetes:**
-- Each pod gets a unique name automatically
-- Run single-core workers (`-c 1`) for better scaling and debugging
-- Set `terminationGracePeriodSeconds` for graceful shutdown
-- Use Horizontal Pod Autoscaler (HPA) for auto-scaling
-- Implement liveness/readiness probes with `celery inspect ping`
-
-### Docker Compose
-
-Example docker-compose.yml:
-
-```yaml
-version: '3.8'
-services:
-  redis:
-    image: redis:7
-    ports:
-      - "6379:6379"
-
-  celery-worker:
-    image: myapp:latest
-    command: celery -A myapp worker -n worker@%h --redis-statedb=redis://redis:6379/0
-    depends_on:
-      - redis
-    deploy:
-      replicas: 3
-```
-
-Each replica gets a unique container ID as its hostname automatically.
 
 ## Troubleshooting
 
@@ -327,7 +254,7 @@ GET celery:worker:state:worker1@host1:zrevoked
 
 **Issue:** State not persisting across restarts
 - **Cause:** Worker hostname changes between restarts
-- **Solution:** In containers, use stable hostnames (e.g., pod names in Kubernetes) or set custom static names
+- **Solution:** In containers, use stable hostnames or set custom static names
 
 ## Testing
 
