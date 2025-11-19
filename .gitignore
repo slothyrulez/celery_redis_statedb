@@ -208,3 +208,4 @@ __marimo__/
 
 tmp/
 .claude
+.python-version
