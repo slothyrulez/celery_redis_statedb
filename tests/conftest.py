@@ -3,6 +3,7 @@
 from unittest.mock import Mock, patch
 
 import pytest
+from celery import Celery
 from celery.utils.collections import LimitedSet  # type: ignore[attr-defined]
 from fakeredis import FakeRedis
 from kombu.clocks import LamportClock  # type: ignore[import-untyped]
@@ -58,9 +59,7 @@ def mock_worker():
 
 
 @pytest.fixture
-def mock_celery_app():
-    """Create a mock Celery app."""
-    app = Mock()
-    app.main = "testapp"
-    app.steps = {"worker": set()}
+def celery_app() -> Celery:
+    """Create a real Celery app instance for testing."""
+    app = Celery("testapp")
     return app
