@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 from celery import bootsteps
 
+from celery_redis_statedb.migration import StateDBMigrator
 from celery_redis_statedb.state import RedisPersistent
 
 if TYPE_CHECKING:
@@ -34,9 +35,16 @@ class RedisStatePersistence(bootsteps.Step):
         ```
     """
 
-    def __init__(self, worker: "Worker", redis_statedb: str | None = None, **kwargs: Any) -> None:
-        # Store redis_statedb for later use
+    def __init__(
+        self,
+        worker: "Worker",
+        redis_statedb: str | None = None,
+        migrate_statedb: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        # Store redis_statedb and migrate_statedb for later use
         self.redis_statedb = redis_statedb
+        self.migrate_statedb = migrate_statedb
         # Check if statedb is configured
         self.enabled = self._should_enable(worker, redis_statedb)
         # worker._persistence = None  # type: ignore[attr-defined]
@@ -91,3 +99,25 @@ class RedisStatePersistence(bootsteps.Step):
             # Set to None so worker can continue without persistence
             worker._redis_persistence = None  # type: ignore[attr-defined]
             raise
+
+        try:
+            # Perform migration if --migrate-statedb is provided
+            if self.migrate_statedb and worker._redis_persistence is not None:
+                logger.info(
+                    "[redis-statedb] Migration requested from: %s",
+                    self.migrate_statedb,
+                )
+                migrator = StateDBMigrator(
+                    statedb_path=self.migrate_statedb,
+                    redis_state_db=worker._redis_persistence.db,
+                )
+                migration_success = migrator.run()
+
+                if migration_success:
+                    logger.info("[redis-statedb] Migration completed successfully")
+                    # Re-merge to load migrated data into worker state
+                    worker._redis_persistence.merge()  # type: ignore[attr-defined]
+                else:
+                    logger.error("[redis-statedb] Migration failed, continuing with empty state")
+        except Exception as exc:
+            logger.error("[redis-statedb] Migration process failed: %s", exc)
