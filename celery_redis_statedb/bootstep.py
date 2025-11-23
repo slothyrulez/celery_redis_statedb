@@ -102,14 +102,14 @@ class RedisStatePersistence(bootsteps.Step):
 
         try:
             # Perform migration if --migrate-statedb is provided
-            if self.migrate_statedb and worker._redis_persistence is not None:
+            if self.migrate_statedb and worker._redis_persistence is not None:  # type: ignore[attr-defined]
                 logger.info(
                     "[redis-statedb] Migration requested from: %s",
                     self.migrate_statedb,
                 )
                 migrator = StateDBMigrator(
                     statedb_path=self.migrate_statedb,
-                    redis_state_db=worker._redis_persistence.db,
+                    redis_state_db=worker._redis_persistence.db,  # type: ignore[attr-defined]
                 )
                 migration_success = migrator.run()
 

@@ -78,7 +78,7 @@ class RedisStateDB:
     def _get_key(self, name: str) -> str:
         return f"{self.key_prefix}{name}"
 
-    def update(self, zrevoked: LimitedSet, clock: Any) -> bool:
+    def update(self, zrevoked: LimitedSet, clock: int | None) -> bool:
         zrevoked_key = self._get_key("zrevoked")
         zrevoked_data = self.compress(self._dumps(zrevoked))
         clock_key = self._get_key("clock")
@@ -87,7 +87,8 @@ class RedisStateDB:
         try:
             pipe = self.redis_client.pipeline()
             pipe.set(zrevoked_key, zrevoked_data)
-            pipe.set(clock_key, clock_data)
+            if clock_data is not None:
+                pipe.set(clock_key, clock_data)
             pipe.execute()
         except (redis.ConnectionError, redis.TimeoutError, redis.RedisError) as exc:
             logger.error("[redis-statedb] Error syncing state to Redis: %s", exc)

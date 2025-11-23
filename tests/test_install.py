@@ -25,23 +25,34 @@ class TestInstallRedisStateDB:
         # Verify Redis StateDB was added
         assert RedisStatePersistence in celery_app.steps["worker"]
 
-        # Verify CLI option was added
-        assert len(celery_app.user_options["worker"]) == 1
-        option = list(celery_app.user_options["worker"])[0]
-        assert isinstance(option, Option)
-        assert "--redis-statedb" in option.opts
+        # Verify CLI options were added (--redis-statedb and --migrate-statedb)
+        assert len(celery_app.user_options["worker"]) == 2
+        options = list(celery_app.user_options["worker"])
+        assert all(isinstance(opt, Option) for opt in options)
+        option_names = {opt.opts[0] for opt in options}
+        assert "--redis-statedb" in option_names
+        assert "--migrate-statedb" in option_names
 
     def test_install_cli_option_parameters(self, celery_app: Celery) -> None:
-        """Test that the CLI option has correct parameters."""
+        """Test that the CLI options have correct parameters."""
         install_redis_statedb(celery_app)
 
         # Type narrowing for typechecker
         assert celery_app.user_options is not None
 
-        option = list(celery_app.user_options["worker"])[0]
-        assert option.type.name == "text"  # str type in Click
-        assert option.default is None
-        assert "Redis URL for state persistence" in option.help
+        options = list(celery_app.user_options["worker"])
+
+        # Find --redis-statedb option
+        redis_opt = next(opt for opt in options if "--redis-statedb" in opt.opts)
+        assert redis_opt.type.name == "text"  # str type in Click
+        assert redis_opt.default is None
+        assert "Redis URL for state persistence" in redis_opt.help
+
+        # Find --migrate-statedb option
+        migrate_opt = next(opt for opt in options if "--migrate-statedb" in opt.opts)
+        assert migrate_opt.type.name == "text"  # str type in Click
+        assert migrate_opt.default is None
+        assert "Path to file-based statedb" in migrate_opt.help
 
     def test_install_idempotent(self, celery_app: Celery) -> None:
         """Test that installing multiple times is safe."""
