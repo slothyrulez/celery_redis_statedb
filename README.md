@@ -1,7 +1,7 @@
 # Celery Redis StateDB
 
 [![Tests](https://img.shields.io/badge/tests-passing-brightgreen)](tests/)
-[![Coverage](https://img.shields.io/badge/coverage-89%25-green)](tests/)
+[![Coverage](https://img.shields.io/badge/coverage-90%25-green)](tests/)
 [![Python](https://img.shields.io/badge/python-3.10+-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -21,6 +21,7 @@ This package provides a Redis-based backend for Celery's worker state persistenc
 - **Per-Worker Isolation**: Each worker maintains its own state using unique key prefixes based on hostname
 - **Concurrency-Safe**: No race conditions since workers never write to the same keys
 - **Easy Integration**: Simple Celery bootstep that works with existing applications
+- **Migration Support**: Migrate existing file-based statedb to Redis with automatic backup
 
 ## Installation
 
@@ -58,6 +59,9 @@ install_redis_statedb(app)
 
 # Start worker with Redis statedb
 # celery -A myapp worker --redis-statedb=redis://localhost:6379/0
+
+# Or migrate from existing file-based statedb
+# celery -A myapp worker --redis-statedb=redis://localhost:6379/0 --migrate-statedb=/path/to/worker.db
 ```
 
 **With custom configuration:**
@@ -88,6 +92,49 @@ export CELERY_REDIS_STATE_KEY_PREFIX=myapp:worker:state:
 # Start worker
 celery -A myapp worker --redis-statedb=redis://localhost:6379/0 --loglevel=info
 ```
+
+## Migrating from File-Based StateDB
+
+If you have an existing Celery worker using file-based state persistence (`--statedb`), you can migrate to Redis:
+
+```bash
+celery -A myapp worker \
+  --redis-statedb=redis://localhost:6379/0 \
+  --migrate-statedb=/path/to/worker.db
+```
+
+**What happens during migration:**
+1. Creates a timestamped backup: `backup-worker.TIMESTAMP.db`
+2. Migrates revoked tasks and clock value to Redis
+3. Renames original file to: `worker.db.migrated.TIMESTAMP`
+
+The migration:
+- ✅ Supports Celery statedb formats v1, v2, and v3
+- ✅ Preserves logical clock synchronization
+- ✅ Creates double redundancy (backup + renamed file)
+- ✅ Fails safely if file cannot be renamed (prevents stale data overwrite)
+- ⚠️ **Linux-only**: Assumes single-file shelve database (gdbm). On systems using ndbm/dumbdbm (BSD, macOS), multiple files (.dir, .dat) may not be fully handled.
+
+**After successful migration:**
+- Backup file: `/path/to/backup-worker.TIMESTAMP.db`
+- Renamed original: `/path/to/worker.db.migrated.TIMESTAMP`
+- Original path: `/path/to/worker.db` (removed)
+
+**⚠️ IMPORTANT: Remove --migrate-statedb After First Run**
+
+After the migration completes successfully, **remove the `--migrate-statedb` flag** from your worker command:
+
+```bash
+# After migration, restart with only --redis-statedb
+celery -A myapp worker --redis-statedb=redis://localhost:6379/0
+```
+
+Keeping `--migrate-statedb` in your command can cause:
+- Unnecessary migration attempts on every restart
+- Potential data races if the file still exists
+- Risk of corruption if multiple workers attempt migration simultaneously
+
+The migration should only be run **once** during the transition from file-based to Redis-based state persistence.
 
 ## Configuration Options
 

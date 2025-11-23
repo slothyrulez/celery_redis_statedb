@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 from click import Option
 
 from celery_redis_statedb.bootstep import RedisStatePersistence
+from celery_redis_statedb.migration import StateDBMigrator
 from celery_redis_statedb.state import RedisPersistent, RedisStateDB
 
 if TYPE_CHECKING:
@@ -15,6 +16,7 @@ __all__ = [
     "RedisStatePersistence",
     "RedisPersistent",
     "install_redis_statedb",
+    "StateDBMigrator",
 ]
 
 """Redis-based state persistence for Celery workers.
@@ -44,6 +46,9 @@ def install_redis_statedb(app: "Celery") -> None:
         >>>
         >>> # Start worker with Redis statedb:
         >>> # celery -A myapp worker --redis-statedb=redis://localhost:6379/0
+        >>>
+        >>> # Migrate from file-based statedb to Redis:
+        >>> # celery -A myapp worker --redis-statedb=redis://localhost:6379/0 --migrate-statedb=/path/to/worker.db
 
     """
     # Add the --redis-statedb option to worker command using Celery's extension API
@@ -54,6 +59,15 @@ def install_redis_statedb(app: "Celery") -> None:
             type=str,
             default=None,
             help="Redis URL for state persistence (e.g., redis://localhost:6379/0). ",
+        )
+    )
+    app.user_options["worker"].add(
+        Option(
+            ("--migrate-statedb",),
+            type=str,
+            default=None,
+            help="Path to file-based statedb to migrate to Redis."
+            " The file will be backed up before migration and renamed.",
         )
     )
 
